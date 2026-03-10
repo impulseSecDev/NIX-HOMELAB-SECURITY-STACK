@@ -32,11 +32,11 @@ Built for hands-on learning and portfolio demonstration across network security,
 All NixOS hosts connect to a private Tailscale mesh coordinated by a self-hosted Headscale server on the VPS. All inter-host admin traffic, SSH access, and internal service communication routes exclusively over the encrypted mesh. ACL policy enforces access control — only authenticated tailnet members can reach services or initiate SSH sessions.
 
 ```
-Daily Driver (100.64.0.1) ─┐
-ELK VM       (100.64.0.3) ─┤
-Wazuh VM     (100.64.0.4) ─┼── Headscale (tails.loranjennings.com)
-Vaultwarden  (100.64.0.5) ─┤
-Laptop                    ─┘
+Daily Driver  ─┐
+ELK VM        ─┤
+Wazuh VM      ─┼── Headscale 
+Vaultwarden   ─┤
+Laptop        ─┘
 ```
 
 ### Log Shipping — WireGuard wg0 (10.10.10.0/24)
@@ -44,11 +44,11 @@ Laptop                    ─┘
 A dedicated WireGuard interface handles all log shipping traffic, deliberately separated from admin channels. All VMs and the laptop maintain encrypted tunnels to the VPS hub. The VPS forwards traffic between peers using the WireGuard routing table — no traffic is routable outside the `10.10.10.0/24` subnet.
 
 ```
-Daily Driver (10.10.10.4) ─┐
-ELK VM       (10.10.10.2) ─┤
-Wazuh VM     (10.10.10.3) ─┼── VPS hub (10.10.10.1)
-Vaultwarden  (10.10.10.5) ─┤
-Laptop       (10.10.10.6) ─┘
+Daily Driver  ─┐
+ELK VM        ─┤
+Wazuh VM      ─┼── VPS hub
+Vaultwarden   ─┤
+Laptop        ─┘
 ```
 
 ### SSH Access — WireGuard wg2
@@ -69,7 +69,7 @@ Device → HTTPS → VPS Nginx → WireGuard (wg1) → Vaultwarden VM Nginx → 
 
 ### TLS Certificate Management
 
-Each service VM provisions its own wildcard TLS certificate via the NixOS `security.acme` module using Cloudflare DNS-01 challenge validation. Covers `*.mesh.loranjennings.com`. Fully automated renewal — no manual certificate management.
+Each service VM provisions its own wildcard TLS certificate via the NixOS `security.acme` module using Cloudflare DNS-01 challenge validation. Covers `*.mesh.com`. Fully automated renewal — no manual certificate management.
 
 ---
 
