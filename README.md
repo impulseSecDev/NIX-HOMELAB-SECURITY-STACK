@@ -16,11 +16,11 @@ Built for hands-on learning and portfolio demonstration across network security,
 
 | Host | OS | Role |
 |---|---|---|
-| Daily Driver | NixOS | Primary workstation, KVM/QEMU VM host, OpenWebUI (local LLM) |
+| [Daily Driver](https://github.com/impulseSecDev/dailyDriver) | NixOS | Primary workstation, KVM/QEMU VM host, OpenWebUI (local LLM) |
 | VPS | Ubuntu | Nginx reverse proxy, Headscale, Suricata IPS, WireGuard hub |
-| ELK VM | NixOS | Elasticsearch, Kibana, Fluent Bit — SIEM core |
-| Wazuh VM | NixOS | Wazuh Manager, Fluent Bit — HIDS core |
-| Vaultwarden VM | NixOS | Self-hosted password manager, family/friends access |
+| [ELK VM](https://github.com/impulseSecDev/ELK-NIXVM) | NixOS | Elasticsearch, Kibana, Fluent Bit — SIEM core |
+| [Wazuh VM](https://github.com/impulseSecDev/WAZUH-NIXVM) | NixOS | Wazuh Manager, Fluent Bit — HIDS core |
+| [Vaultwarden VM](https://github.com/impulseSecDev/VW-NIXVM) | NixOS | Self-hosted password manager, family/friends access |
 | Laptop | NixOS | Mobile workstation, log shipping over WireGuard |
 
 ---
@@ -34,7 +34,7 @@ All NixOS hosts connect to a private Tailscale mesh coordinated by a self-hosted
 ```
 Daily Driver  ─┐
 ELK VM        ─┤
-Wazuh VM      ─┼── Headscale 
+Wazuh VM      ─┼── Headscale
 Vaultwarden   ─┤
 Laptop        ─┘
 ```
@@ -69,7 +69,7 @@ Device → HTTPS → VPS Nginx → WireGuard (wg1) → Vaultwarden VM Nginx → 
 
 ### TLS Certificate Management
 
-Each service VM provisions its own wildcard TLS certificate via the NixOS `security.acme` module using Cloudflare DNS-01 challenge validation. Covers `*.mesh.com`. Fully automated renewal — no manual certificate management.
+Each service VM provisions its own wildcard TLS certificate via the NixOS `security.acme` module using Cloudflare DNS-01 challenge validation. Covers `*.mesh.mydomain.com`. Fully automated renewal — no manual certificate management.
 
 ---
 
@@ -113,7 +113,7 @@ Docker containers for software not in nixpkgs (Elasticsearch, Kibana, Wazuh) are
 
 The VPS runs Ubuntu and is a candidate for future NixOS + impermanence migration.
 
-In the end, the infrastructure is the documentation.
+> *Why NixOS? In the end, the infrastructure is the documentation.*
 
 ---
 
