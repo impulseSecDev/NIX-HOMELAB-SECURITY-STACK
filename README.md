@@ -138,7 +138,7 @@ The VPS runs Ubuntu and is a candidate for future NixOS + impermanence migration
 
 ## Secrets & Security Notice
 
-All secrets (API keys, passwords, private keys, IP addresses) are managed via sops-nix and excluded from version control. Public WireGuard keys are safe to commit and appear in configs as-is. No credentials, private keys, or infrastructure-identifying information are present in this repository.
+All secrets (API keys, passwords, private keys, IP addresses) are managed via sops-nix and excluded from version control. No credentials, private keys, or infrastructure-identifying information are present in this repository.
 
 ---
 
@@ -152,7 +152,7 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | WireGuard tunnels | ✅ Production |
 | Tailscale mesh | ✅ Production |
 | Vaultwarden | ✅ Production — daily use |
-| sops-nix | 🔄 Rollout in progress |
+| sops-nix | ✅ Production |
 | Kibana dashboards | 🔄 In progress |
 | Wazuh custom rules | 📋 Planned |
 | OPNsense VM | 📋 Planned |
