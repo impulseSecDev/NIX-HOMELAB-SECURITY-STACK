@@ -6,7 +6,7 @@
 
 ## Overview
 
-A self-hosted security stack designed around defense-in-depth, zero trust networking, and complete infrastructure-as-code. Every host is declared in version-controlled NixOS configuration. No configuration drift, no undocumented changes — the repository is the system.
+A self-hosted security stack designed around defense-in-depth, zero trust networking, and complete infrastructure-as-code. Excluciding the Headscale VPS which is ubuntu, every host is declared in version-controlled NixOS configuration. No configuration drift, no undocumented changes — the repository is the system.
 
 Built for hands-on learning and portfolio demonstration across network security, SIEM engineering, host-based intrusion detection, encrypted private networking, and secrets management.
 
