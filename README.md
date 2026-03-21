@@ -6,7 +6,7 @@
 
 ## Overview
 
-A self-hosted security stack designed around defense-in-depth, zero trust networking, and complete infrastructure-as-code. Excluciding the Headscale VPS which is ubuntu, every host is declared in version-controlled NixOS configuration. No configuration drift, no undocumented changes — the repository is the system.
+A self-hosted security stack designed around defense-in-depth, zero trust networking, and complete infrastructure-as-code. Excluding the Headscale VPS which is Ubuntu, every host is declared in version-controlled NixOS configuration. No configuration drift, no undocumented changes — the repository is the system.
 
 Built for hands-on learning and portfolio demonstration across network security, SIEM engineering, host-based intrusion detection, encrypted private networking, and secrets management.
 
@@ -17,7 +17,7 @@ Built for hands-on learning and portfolio demonstration across network security,
 | Host | OS | Role |
 |---|---|---|
 | [Daily Driver](https://github.com/impulseSecDev/dailyDriver) | NixOS | Primary workstation, KVM/QEMU VM host, OpenWebUI (local LLM) |
-| VPS | Ubuntu | Nginx reverse proxy, Headscale, Suricata IPS, WireGuard hub |
+| VPS | Ubuntu | Nginx reverse proxy, Headscale, Suricata IPS, WireGuard hub, Fail2ban |
 | [ELK VM](https://github.com/impulseSecDev/ELK-NIXVM) | NixOS | Elasticsearch, Kibana, Fluent Bit — SIEM core |
 | [Wazuh VM](https://github.com/impulseSecDev/WAZUH-NIXVM) | NixOS | Wazuh Manager, Fluent Bit — HIDS core |
 | [Vaultwarden VM](https://github.com/impulseSecDev/VW-NIXVM) | NixOS | Self-hosted password manager, family/friends access |
@@ -77,16 +77,16 @@ Each service VM provisions its own wildcard TLS certificate via the NixOS `secur
 
 | Layer | Tool | Mode |
 |---|---|---|
-| Network IPS | Suricata 7.0.3 | NFQUEUE active blocking on VPS public interface |
+| Network IPS | Suricata 7.0.3 | NFQUEUE active blocking on VPS public interface, et/open ruleset |
 | Host IDS | Wazuh 4.14.3 | Agents on all hosts, FIM, rootkit detection, SCA |
-| SIEM | Elasticsearch + Kibana 8.13.0 | Centralized log aggregation, KQL queries, alerting |
-| Log shipping | Fluent Bit | Structured shipping with custom parsers, WireGuard transport |
-| Auth blocking | Fail2ban | Reactive IP blocking on VPS |
+| SIEM | Elasticsearch + Kibana 8.13.0 | Centralized log aggregation, KQL queries, custom dashboards |
+| Log shipping | Fluent Bit | Structured shipping with custom Lua parsers, WireGuard transport, per-machine scoped credentials |
+| Auth blocking | Fail2ban | Reactive IP blocking on VPS, nginx-bad-request jail |
 | Private mesh | Tailscale + Headscale | Zero trust, ACL-enforced, SSH via tailnet identity |
 | Encrypted tunnels | WireGuard | Channel-separated by function |
 | Credential management | Vaultwarden | Self-hosted, HTTPS-only |
-| Secrets management | sops-nix | Encrypted secrets in version-controlled NixOS config (rollout in progress) |
-| Reverse proxy | Nginx | Per-service TLS termination, public routing via VPS |
+| Secrets management | sops-nix | Encrypted secrets in version-controlled NixOS config |
+| Reverse proxy | Nginx | Per-service TLS termination, public routing via VPS, exploit probe blocking |
 
 ---
 
@@ -102,6 +102,38 @@ A deliberate design decision to separate network traffic by function rather than
 | VPS SSH | WireGuard wg2 | SSH access to VPS only |
 
 This ensures a compromise of one channel cannot affect others. WireGuard's ChaCha20-Poly1305 authenticated encryption means the VPS hub cannot read or manipulate log traffic in transit even though it forwards packets between peers.
+
+---
+
+## Fluent Bit Log Parsing
+
+Custom Lua parsers enrich log events beyond what standard parsers provide:
+
+- **Tailscale SSH parser** — extracts `tailscale_src_ip`, sets `tailscale_ssh: true` and `event_type: "tailscale_login"` from systemd journal entries on all NixOS hosts
+- **Fail2ban parser** — extracts `jail`, `action`, and `src_ip` from fail2ban log lines into queryable Kibana fields
+- **Suricata JSON parser** — full eve.json parsing including alert, flow, dns, http, tls, and stats event types
+
+Per-machine Elasticsearch users with scoped index permissions — each host ships logs under its own credentials, limiting blast radius in the event of credential compromise.
+
+---
+
+## Kibana Dashboards
+
+Custom dashboards built manually in Kibana against real production data:
+
+| Dashboard | Status |
+|---|---|
+| Wazuh Alerts & MITRE ATT&CK | ✅ Complete |
+| SSH Authentication Events | ✅ Complete |
+| Suricata IDS/IPS Alerts | ✅ Complete |
+| System/Journal Logs Overview | ✅ Complete |
+| Fail2ban & VPS Security | ✅ Complete |
+| Fluent Bit Log Ingestion Health | 🔄 In progress |
+| Nginx Attack Traffic | 📋 Planned |
+| Tailscale Activity | 📋 Planned |
+| Vaultwarden Access | 📋 Planned |
+
+Dashboards are ongoing — new panels and data sources are added as the stack evolves.
 
 ---
 
@@ -126,13 +158,13 @@ The VPS runs Ubuntu and is a candidate for future NixOS + impermanence migration
 `Elasticsearch` `Kibana` `Fluent Bit` `Wazuh` `Suricata IDS/IPS` `Fail2ban` `sops-nix`
 
 ### Networking & Access
-`WireGuard` `Tailscale` `Zero Trust` `ACL Policy` `NFQUEUE` `iptables` `UFW`
+`WireGuard` `Tailscale` `Zero Trust` `ACL Policy` `NFQUEUE` `iptables`
 
 ### Protocols & Standards
 `TLS/HTTPS` `ACME/Let's Encrypt` `DNS-01` `Cloudflare` `KQL` `SIEM` `HIDS` `FIM`
 
 ### Concepts Demonstrated
-`Defense in depth` `Channel separation` `Infrastructure as code` `Declarative configuration` `Zero trust networking` `Log aggregation` `Intrusion detection` `Active threat blocking` `Encrypted private networking` `Secrets management`
+`Defense in depth` `Channel separation` `Infrastructure as code` `Declarative configuration` `Zero trust networking` `Log aggregation` `Intrusion detection` `Active threat blocking` `Encrypted private networking` `Secrets management` `Custom log parsing` `SIEM engineering`
 
 ---
 
@@ -148,12 +180,23 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 |---|---|
 | ELK Stack | ✅ Production |
 | Wazuh HIDS | ✅ Production |
-| Suricata IPS | ✅ Production — NFQUEUE mode |
+| Suricata IPS | ✅ Production — NFQUEUE mode, et/open ruleset, 49k+ rules |
+| Fail2ban | ✅ Production — VPS, rollout to remaining hosts planned |
 | WireGuard tunnels | ✅ Production |
 | Tailscale mesh | ✅ Production |
 | Vaultwarden | ✅ Production — daily use |
 | sops-nix | ✅ Production |
-| Kibana dashboards | 🔄 In progress |
+| Fluent Bit parsers | ✅ Production — Tailscale SSH, fail2ban, Suricata |
+| Kibana dashboards | 🔄 In progress — ongoing |
+| Nginx exploit blocking | ✅ Production — deny rules on VPS and Vaultwarden VM |
+| Per-machine Fluent Bit credentials | 🔄 In progress — VPS complete, remaining hosts pending |
 | Wazuh custom rules | 📋 Planned |
+| Fail2ban — remaining VMs | 📋 Planned |
+| Suricata IPS — Vaultwarden VM | 📋 Planned |
+| Suricata IPS — Wazuh VM | 📋 Planned |
+| Suricata IPS — ELK VM | 📋 Planned |
+| Zeek — Daily Driver | 📋 Planned |
+| OpenSnitch — Daily Driver | 📋 Planned |
 | OPNsense VM | 📋 Planned |
 | Attack simulation | 📋 Planned |
+| VPS NixOS migration | 📋 Planned |
