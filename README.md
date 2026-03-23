@@ -78,10 +78,11 @@ Each service VM provisions its own wildcard TLS certificate via the NixOS `secur
 | Layer | Tool | Mode |
 |---|---|---|
 | Network IPS | Suricata 7.0.3 | NFQUEUE active blocking on VPS public interface, et/open ruleset |
+| Host IPS | Suricata | NFQ mode on ELK, Wazuh, and Vaultwarden VMs — daily rule updates, WireGuard/Tailscale traffic bypassed |
 | Host IDS | Wazuh 4.14.3 | Agents on all hosts, FIM, rootkit detection, SCA |
 | SIEM | Elasticsearch + Kibana 8.13.0 | Centralized log aggregation, KQL queries, custom dashboards |
 | Log shipping | Fluent Bit | Structured shipping with custom Lua parsers, WireGuard transport, per-machine scoped credentials |
-| Auth blocking | Fail2ban | Reactive IP blocking on VPS, nginx-bad-request jail |
+| Auth blocking | Fail2ban | VPS, ELK VM, Wazuh VM, and Vaultwarden VM — SSH, service-specific jails, incremental ban times |
 | Private mesh | Tailscale + Headscale | Zero trust, ACL-enforced, SSH via tailnet identity |
 | Encrypted tunnels | WireGuard | Channel-separated by function |
 | Credential management | Vaultwarden | Self-hosted, HTTPS-only |
@@ -180,8 +181,14 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 |---|---|
 | ELK Stack | ✅ Production |
 | Wazuh HIDS | ✅ Production |
-| Suricata IPS | ✅ Production — NFQUEUE mode, et/open ruleset, 49k+ rules |
-| Fail2ban | ✅ Production — VPS, rollout to remaining hosts planned |
+| Suricata IPS — VPS | ✅ Production — NFQUEUE mode, et/open ruleset, 49k+ rules |
+| Suricata IPS — ELK VM | ✅ Production — NFQ mode, daily rule updates |
+| Suricata IPS — Wazuh VM | ✅ Production — NFQ mode, daily rule updates |
+| Suricata IPS — Vaultwarden VM | ✅ Production — NFQ mode, daily rule updates |
+| Fail2ban — VPS | ✅ Production |
+| Fail2ban — ELK VM | ✅ Production — SSH, Kibana, Suricata jails |
+| Fail2ban — Wazuh VM | ✅ Production — SSH, Suricata jails |
+| Fail2ban — Vaultwarden VM | ✅ Production — SSH, Vaultwarden jails |
 | WireGuard tunnels | ✅ Production |
 | Tailscale mesh | ✅ Production |
 | Vaultwarden | ✅ Production — daily use |
@@ -191,10 +198,6 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | Nginx exploit blocking | ✅ Production — deny rules on VPS and Vaultwarden VM |
 | Per-machine Fluent Bit credentials | 🔄 In progress — VPS complete, remaining hosts pending |
 | Wazuh custom rules | 📋 Planned |
-| Fail2ban — remaining VMs | 📋 Planned |
-| Suricata IPS — Vaultwarden VM | 📋 Planned |
-| Suricata IPS — Wazuh VM | 📋 Planned |
-| Suricata IPS — ELK VM | 📋 Planned |
 | Zeek — Daily Driver | 📋 Planned |
 | OpenSnitch — Daily Driver | 📋 Planned |
 | OPNsense VM | 📋 Planned |
