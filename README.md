@@ -129,10 +129,11 @@ Custom dashboards built manually in Kibana against real production data:
 | Suricata IDS/IPS Alerts | ✅ Complete |
 | System/Journal Logs Overview | ✅ Complete |
 | Fail2ban & VPS Security | ✅ Complete |
-| Fluent Bit Log Ingestion Health | 🔄 In progress |
-| Nginx Attack Traffic | 📋 Planned |
+| Fluent Bit Log Ingestion Health | ✅ Complete |
+| Nginx Attack Traffic | ✅ Complete |
 | Tailscale Activity | 📋 Planned |
-| Vaultwarden Access | 📋 Planned |
+| Vaultwarden Access | 🔄 In progress |
+| Sudo Activity | 📋 Planned |
 
 Dashboards are ongoing — new panels and data sources are added as the stack evolves.
 
