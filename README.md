@@ -17,7 +17,7 @@ Built for hands-on learning and portfolio demonstration across network security,
 | Host | OS | Role |
 |---|---|---|
 | [Daily Driver](https://github.com/impulseSecDev/dailyDriver) | NixOS | Primary workstation, KVM/QEMU VM host, OpenWebUI (local LLM) |
-| VPS | Ubuntu | Nginx reverse proxy, Headscale, Suricata IPS, WireGuard hub, Fail2ban |
+| VPS | Ubuntu | Nginx (Hardened), Headscale, Suricata IPS, WireGuard hub, Fail2ban |
 | [ELK VM](https://github.com/impulseSecDev/ELK-NIXVM) | NixOS | Elasticsearch, Kibana, Fluent Bit — SIEM core |
 | [Wazuh VM](https://github.com/impulseSecDev/WAZUH-NIXVM) | NixOS | Wazuh Manager, Fluent Bit — HIDS core |
 | [Vaultwarden VM](https://github.com/impulseSecDev/VW-NIXVM) | NixOS | Self-hosted password manager, family/friends access |
@@ -57,14 +57,14 @@ A dedicated WireGuard interface exclusively for SSH access to the VPS, isolated 
 
 ### Vaultwarden Access Paths
 
-Two distinct access paths, both HTTPS end-to-end, Vaultwarden VM never directly internet-exposed:
+Two distinct access paths, both HTTPS end-to-end, Vaultwarden VM never directly internet-exposed. Recent hardening includes **Backend SSL Verification** and **Proxy Buffering** optimizations.
 
 ```
 # Tailnet members
 Device → Tailscale → Vaultwarden VM Nginx → Vaultwarden
 
 # External users (friends/family)
-Device → HTTPS → VPS Nginx → WireGuard (wg1) → Vaultwarden VM Nginx → Vaultwarden
+Device → HTTPS → VPS Nginx (Hardened) → WireGuard (wg1) → Vaultwarden VM Nginx → Vaultwarden
 ```
 
 ### TLS Certificate Management
@@ -78,14 +78,15 @@ Each service VM provisions its own wildcard TLS certificate via the NixOS `secur
 | Layer | Tool | Mode |
 |---|---|---|
 | Network IPS | Suricata 7.0.3 | NFQUEUE active blocking on VPS public interface, et/open ruleset |
-| Host IPS | Suricata | NFQ mode on ELK, Wazuh, and Vaultwarden VMs — daily rule updates, WireGuard/Tailscale traffic bypassed |
+| Host IPS | Suricata | NFQ mode on ELK, Wazuh, and Vaultwarden VMs — daily rule updates |
 | Host IDS | Wazuh 4.14.3 | Agents on all hosts, FIM, rootkit detection, SCA |
 | SIEM | Elasticsearch + Kibana 8.13.0 | Centralized log aggregation, KQL queries, custom dashboards |
-| Log shipping | Fluent Bit | Structured shipping with custom Lua parsers, WireGuard transport, per-machine scoped credentials |
-| Auth blocking | Fail2ban | VPS, ELK VM, Wazuh VM, and Vaultwarden VM — SSH, service-specific jails, incremental ban times |
+| **Edge Hardening** | **Nginx (VPS)** | **Global rate limiting, shared WebSocket upgrade maps, and hidden file denial (/\.)** |
+| **Anti-Recon** | **Nginx Blackhole** | **Default 443 server block using snakeoil certs to prevent SNI/domain leakage during IP scans** |
+| **Backend Security** | **Upstream SSL** | **Full proxy SSL verification (`proxy_ssl_verify on`) for secure backend communication** |
+| Log shipping | Fluent Bit | Structured shipping with custom Lua parsers, WireGuard transport |
+| Auth blocking | Fail2ban | VPS, ELK VM, Wazuh VM, and Vaultwarden VM |
 | Private mesh | Tailscale + Headscale | Zero trust, ACL-enforced, SSH via tailnet identity |
-| Encrypted tunnels | WireGuard | Channel-separated by function |
-| Credential management | Vaultwarden | Self-hosted, HTTPS-only |
 | Secrets management | sops-nix | Encrypted secrets in version-controlled NixOS config |
 | Reverse proxy | Nginx | Per-service TLS termination, public routing via VPS, exploit probe blocking |
 
@@ -99,7 +100,7 @@ A deliberate design decision to separate network traffic by function rather than
 |---|---|---|
 | Admin / SSH | Tailscale mesh | SSH, file transfers, service access |
 | Log shipping | WireGuard wg0 | Fluent Bit, Wazuh agent comms |
-| Vaultwarden routing | WireGuard wg1 | Public → VPS → Vaultwarden VM |
+| Vaultwarden routing | WireGuard wg1 | Public → VPS (Hardened Proxy) → Vaultwarden VM |
 | VPS SSH | WireGuard wg2 | SSH access to VPS only |
 
 This ensures a compromise of one channel cannot affect others. WireGuard's ChaCha20-Poly1305 authenticated encryption means the VPS hub cannot read or manipulate log traffic in transit even though it forwards packets between peers.
@@ -135,8 +136,6 @@ Custom dashboards built manually in Kibana against real production data:
 | Vaultwarden Access | 🔄 In progress |
 | Sudo Activity | 📋 Planned |
 
-Dashboards are ongoing — new panels and data sources are added as the stack evolves.
-
 ---
 
 ## Why NixOS
@@ -165,9 +164,6 @@ The VPS runs Ubuntu and is a candidate for future NixOS + impermanence migration
 ### Protocols & Standards
 `TLS/HTTPS` `ACME/Let's Encrypt` `DNS-01` `Cloudflare` `KQL` `SIEM` `HIDS` `FIM`
 
-### Concepts Demonstrated
-`Defense in depth` `Channel separation` `Infrastructure as code` `Declarative configuration` `Zero trust networking` `Log aggregation` `Intrusion detection` `Active threat blocking` `Encrypted private networking` `Secrets management` `Custom log parsing` `SIEM engineering`
-
 ---
 
 ## Secrets & Security Notice
@@ -183,21 +179,16 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | ELK Stack | ✅ Production |
 | Wazuh HIDS | ✅ Production |
 | Suricata IPS — VPS | ✅ Production — NFQUEUE mode, et/open ruleset, 49k+ rules |
-| Suricata IPS — ELK VM | ✅ Production — NFQ mode, daily rule updates |
-| Suricata IPS — Wazuh VM | ✅ Production — NFQ mode, daily rule updates |
-| Suricata IPS — Vaultwarden VM | ✅ Production — NFQ mode, daily rule updates |
-| Fail2ban — VPS | ✅ Production |
-| Fail2ban — ELK VM | ✅ Production — SSH, Kibana, Suricata jails |
-| Fail2ban — Wazuh VM | ✅ Production — SSH, Suricata jails |
-| Fail2ban — Vaultwarden VM | ✅ Production — SSH, Vaultwarden jails |
+| Nginx Hardening | ✅ Production — Rate limiting, hidden file blocks, and SSL verification |
+| Anti-Scan Blackhole | ✅ Production — HTTPS default_server returns 444 |
+| Fail2ban | ✅ Production |
 | WireGuard tunnels | ✅ Production |
 | Tailscale mesh | ✅ Production |
 | Vaultwarden | ✅ Production — daily use |
 | sops-nix | ✅ Production |
 | Fluent Bit parsers | ✅ Production — Tailscale SSH, fail2ban, Suricata |
-| Kibana dashboards | 🔄 In progress — ongoing |
-| Nginx exploit blocking | ✅ Production — deny rules on VPS and Vaultwarden VM |
-| Per-machine Fluent Bit credentials | 🔄 In progress — VPS complete, remaining hosts pending |
+| Headscale Whitelist | 📋 Planned — Restricting VPS paths to /register, /machine, etc. |
+| Access Logging Audit | 🔄 In progress — Verifying vhost log consistency |
 | Wazuh custom rules | 📋 Planned |
 | Zeek — Daily Driver | 📋 Planned |
 | OpenSnitch — Daily Driver | 📋 Planned |
