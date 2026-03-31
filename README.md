@@ -81,11 +81,12 @@ Each service VM provisions its own wildcard TLS certificate via the NixOS `secur
 | Host IPS | Suricata | NFQ mode on ELK, Wazuh, and Vaultwarden VMs — daily rule updates |
 | Host IDS | Wazuh 4.14.3 | Agents on all hosts, FIM, rootkit detection, SCA |
 | SIEM | Elasticsearch + Kibana 8.13.0 | Centralized log aggregation, KQL queries, custom dashboards |
-| **Edge Hardening** | **Nginx (VPS)** | **Global rate limiting, shared WebSocket upgrade maps, and hidden file denial (/\.)** |
-| **Anti-Recon** | **Nginx Blackhole** | **Default 443 server block using snakeoil certs to prevent SNI/domain leakage during IP scans** |
+| **Edge Hardening** | **Nginx (VPS)** | **Global rate limiting, shared WebSocket upgrade maps, hidden file denial (`/\.`), and error code silencing (400/401/403/404/500 → 444)** |
+| **Anti-Recon** | **Nginx Blackhole** | **Default 443 server block using snakeoil certs returns 444 on all requests and all error codes — no SNI/domain leakage, no chatter on probes** |
 | **Backend Security** | **Upstream SSL** | **Full proxy SSL verification (`proxy_ssl_verify on`) for secure backend communication** |
+| **Firewall Hardening** | **iptables (VPS)** | **Explicit DROP rules for IKE/IPsec (UDP 500/4500), ICMP echo, and ICMP timestamp — silent drop before kernel generates ICMP unreachable responses** |
 | Log shipping | Fluent Bit | Structured shipping with custom Lua parsers, WireGuard transport |
-| Auth blocking | Fail2ban | VPS, ELK VM, Wazuh VM, and Vaultwarden VM |
+| Auth blocking | Fail2ban | VPS, ELK VM, Wazuh VM, and Vaultwarden VM — nftables backend, `blocktype=drop` (no REJECT chatter) |
 | Private mesh | Tailscale + Headscale | Zero trust, ACL-enforced, SSH via tailnet identity |
 | Secrets management | sops-nix | Encrypted secrets in version-controlled NixOS config |
 | Reverse proxy | Nginx | Per-service TLS termination, public routing via VPS, exploit probe blocking |
@@ -104,6 +105,72 @@ A deliberate design decision to separate network traffic by function rather than
 | VPS SSH | WireGuard wg2 | SSH access to VPS only |
 
 This ensures a compromise of one channel cannot affect others. WireGuard's ChaCha20-Poly1305 authenticated encryption means the VPS hub cannot read or manipulate log traffic in transit even though it forwards packets between peers.
+
+---
+
+## VPS Firewall Hardening
+
+### Background
+
+Suricata flagged an inbound IKE/IPsec probe (`invalid_proposal`) on UDP 500. Investigation revealed the VPS was responding to port scans with ICMP unreachable responses rather than silently dropping traffic — leaking host presence to scanners.
+
+### Approach
+
+Explicit DROP rules inserted at position 1 of the INPUT chain intercept traffic before the kernel UDP stack can generate ICMP unreachable responses. All rules persisted via `netfilter-persistent`.
+
+```
+# Silent drop — IKE/IPsec probes (UDP 500/4500)
+iptables -I INPUT 1 -p udp --dport 500 -j DROP
+iptables -I INPUT 1 -p udp --dport 4500 -j DROP
+
+# Silent drop — OS fingerprinting via ICMP timestamp
+iptables -I INPUT 1 -p icmp --icmp-type timestamp-request -j DROP
+
+# Silent drop — ICMP echo (ping)
+iptables -I INPUT 1 -p icmp --icmp-type echo-request -j DROP
+```
+
+### Known Limitations
+
+The VPS remains discoverable via TCP SYN probes on ports 80/443 — unavoidable while running a public web server. Suricata remains in IPS mode via NFQUEUE with `exception-policy: auto` (drop-flow in IPS mode).
+
+---
+
+## Fail2ban — Silent Banning
+
+Fail2ban was previously banning via `REJECT with icmp-port-unreachable` (iptables-multiport action), generating response traffic toward attackers. Switched to the nftables backend with `blocktype=drop` across all jails — banned IPs now receive no response.
+
+```ini
+# /etc/fail2ban/jail.local [DEFAULT]
+banaction = nftables[blocktype=drop]
+banaction_allports = nftables[type=allports,blocktype=drop]
+```
+
+Applied consistently in both `jail.local` and `jail.d/defaults-debian.conf`.
+
+---
+
+## Nginx — Anti-Recon & Error Silencing
+
+### Blackhole Default Server
+
+The default HTTPS server block returns Nginx's connection-close code (`444`) for all requests — no TLS handshake, no response body, no domain or SNI leakage during IP-range scans. Snakeoil certificates are presented to complete enough of the handshake to trigger the drop.
+
+All error codes (400, 401, 403, 404, 500) are mapped to `444` on the blackhole server, eliminating response chatter from malformed or probe requests:
+
+```nginx
+server {
+    listen 443 ssl default_server;
+    ssl_certificate     /path/to/snakeoil.crt;
+    ssl_certificate_key /path/to/snakeoil.key;
+
+    error_page 400 401 403 404 500 = @blackhole;
+    location @blackhole { return 444; }
+    location / { return 444; }
+}
+```
+
+This same error-silencing pattern is applied to the default server config, ensuring no upstream errors produce informative responses to unauthenticated scanners.
 
 ---
 
@@ -159,7 +226,7 @@ The VPS runs Ubuntu and is a candidate for future NixOS + impermanence migration
 `Elasticsearch` `Kibana` `Fluent Bit` `Wazuh` `Suricata IDS/IPS` `Fail2ban` `sops-nix`
 
 ### Networking & Access
-`WireGuard` `Tailscale` `Zero Trust` `ACL Policy` `NFQUEUE` `iptables`
+`WireGuard` `Tailscale` `Zero Trust` `ACL Policy` `NFQUEUE` `iptables` `nftables`
 
 ### Protocols & Standards
 `TLS/HTTPS` `ACME/Let's Encrypt` `DNS-01` `Cloudflare` `KQL` `SIEM` `HIDS` `FIM`
@@ -179,16 +246,17 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | ELK Stack | ✅ Production |
 | Wazuh HIDS | ✅ Production |
 | Suricata IPS — VPS | ✅ Production — NFQUEUE mode, et/open ruleset, 49k+ rules |
-| Nginx Hardening | ✅ Production — Rate limiting, hidden file blocks, and SSL verification |
-| Anti-Scan Blackhole | ✅ Production — HTTPS default_server returns 444 |
-| Fail2ban | ✅ Production |
+| Nginx Hardening | ✅ Production — Rate limiting, hidden file blocks, SSL verification, error silencing (→ 444) |
+| Anti-Scan Blackhole | ✅ Production — HTTPS default_server returns 444; all error codes silenced |
+| Firewall Hardening | ✅ Production — IKE/IPsec DROP, ICMP echo DROP, ICMP timestamp DROP |
+| Fail2ban | ✅ Production — nftables backend, blocktype=drop |
 | WireGuard tunnels | ✅ Production |
 | Tailscale mesh | ✅ Production |
 | Vaultwarden | ✅ Production — daily use |
 | sops-nix | ✅ Production |
 | Fluent Bit parsers | ✅ Production — Tailscale SSH, fail2ban, Suricata |
 | Headscale Whitelist | 📋 Planned — Restricting VPS paths to /register, /machine, etc. |
-| Access Logging Audit | 🔄 In progress — Verifying vhost log consistency |
+| Access Logging Audit | ✅ Completed — Verified vhost log consistency |
 | Wazuh custom rules | 📋 Planned |
 | Zeek — Daily Driver | 📋 Planned |
 | OpenSnitch — Daily Driver | 📋 Planned |
