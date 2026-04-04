@@ -260,7 +260,6 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | Wazuh custom rules | 📋 Planned |
 | Zeek — Daily Driver | 📋 Planned |
 | OpenSnitch — Daily Driver | 📋 Planned |
-| Enable Suricata in IPS mode on all interfaces and machines | 📋 Planned |
 | OPNsense VM | 📋 Planned |
 | Attack simulation | 📋 Planned |
 | VPS NixOS migration | 📋 Planned |
