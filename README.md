@@ -80,7 +80,7 @@ Each service VM provisions its own wildcard TLS certificate via the NixOS `secur
 | Network IPS | Suricata 7.0.3 | NFQUEUE active blocking on VPS public interface, et/open ruleset |
 | Host IPS | Suricata | NFQ mode on ELK, Wazuh, and Vaultwarden VMs — daily rule updates |
 | Host IDS | Wazuh 4.14.3 | Agents on all hosts, FIM, rootkit detection, SCA |
-| SIEM | Elasticsearch + Kibana 8.13.0 | Centralized log aggregation, KQL queries, custom dashboards |
+| SIEM | Elasticsearch + Kibana 9.3.2 | Centralized log aggregation, KQL queries, custom dashboards |
 | **Edge Hardening** | **Nginx (VPS)** | **Global rate limiting, shared WebSocket upgrade maps, hidden file denial (`/\.`), and error code silencing (400/401/403/404/500 → 444)** |
 | **Anti-Recon** | **Nginx Blackhole** | **Default 443 server block using snakeoil certs returns 444 on all requests and all error codes — no SNI/domain leakage, no chatter on probes** |
 | **Backend Security** | **Upstream SSL** | **Full proxy SSL verification (`proxy_ssl_verify on`) for secure backend communication** |
