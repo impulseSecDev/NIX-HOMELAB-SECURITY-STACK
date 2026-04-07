@@ -258,7 +258,6 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | Access Logging Audit | ✅ Completed — Verified vhost log consistency |
 | Wazuh custom rules | 📋 Planned |
 | Zeek — Daily Driver | 📋 Planned |
-| OpenSnitch — Daily Driver | 📋 Planned |
 | OPNsense VM | 📋 Planned |
 | Attack simulation | 📋 Planned |
 | VPS NixOS migration | 📋 Planned |
