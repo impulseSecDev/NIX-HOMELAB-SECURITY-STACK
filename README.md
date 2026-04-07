@@ -255,7 +255,6 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | Vaultwarden | ✅ Production — daily use |
 | sops-nix | ✅ Production |
 | Fluent Bit parsers | ✅ Production — Tailscale SSH, fail2ban, Suricata |
-| Headscale Whitelist | 📋 Planned — Restricting VPS paths to /register, /machine, etc. |
 | Access Logging Audit | ✅ Completed — Verified vhost log consistency |
 | Wazuh custom rules | 📋 Planned |
 | Zeek — Daily Driver | 📋 Planned |
