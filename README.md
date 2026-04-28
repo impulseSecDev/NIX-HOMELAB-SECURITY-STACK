@@ -17,11 +17,14 @@ Built for hands-on learning and portfolio demonstration across network security,
 | Host | OS | Role |
 |---|---|---|
 | [Daily Driver](https://github.com/impulseSecDev/dailyDriver) | NixOS | Primary workstation, KVM/QEMU VM host, OpenWebUI (local LLM) |
+| OPNsense Router | OPNsense | Primary gateway, Headscale node, Tailscale exit node |
 | VPS | Ubuntu | Nginx (Hardened), Headscale, Suricata IPS, WireGuard hub, Fail2ban |
 | [ELK VM](https://github.com/impulseSecDev/ELK-NIXVM) | NixOS | Elasticsearch, Kibana, Fluent Bit — SIEM core |
 | [Wazuh VM](https://github.com/impulseSecDev/WAZUH-NIXVM) | NixOS | Wazuh Manager, Fluent Bit — HIDS core |
 | [Vaultwarden VM](https://github.com/impulseSecDev/VW-NIXVM) | NixOS | Self-hosted password manager, family/friends access |
 | Laptop | NixOS | Mobile workstation, log shipping over WireGuard |
+| Netgear Switch | — | LAN switching |
+| Nighthawk AP | — | Wireless access |
 
 ---
 
@@ -29,22 +32,71 @@ Built for hands-on learning and portfolio demonstration across network security,
 
 ### Zero Trust Mesh — Tailscale + Headscale
 
-All NixOS hosts connect to a private Tailscale mesh coordinated by a self-hosted Headscale server on the VPS. All inter-host admin traffic, SSH access, and internal service communication routes exclusively over the encrypted mesh. ACL policy enforces access control — only authenticated tailnet members can reach services or initiate SSH sessions.
+All NixOS hosts connect to a private Tailscale mesh coordinated by a self-hosted Headscale server on the VPS. OPNsense participates in the mesh as both a Headscale node and a Tailscale exit node. All inter-host admin traffic, SSH access, and internal service communication routes exclusively over the encrypted mesh. ACL policy enforces access control — only authenticated tailnet members can reach services or initiate SSH sessions.
 
 ```
 Daily Driver  ─┐
+OPNsense      ─┤
 ELK VM        ─┤
 Wazuh VM      ─┼── Headscale
 Vaultwarden   ─┤
 Laptop        ─┘
 ```
 
+### Headscale ACL Policy
+
+Tag-based ACL policy enforced across the tailnet. `tag:admin` machines have unrestricted access to all destinations including LAN and internet via the exit node. SSH requires re-authentication every 6 hours.
+
+```json
+{
+  "tagOwners": {
+    "tag:server": ["user1@"],
+    "tag:admin": ["user1@"],
+    "tag:exit-node": ["user1@"]
+  },
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:admin"],
+      "dst": ["*:*"]
+    },
+    {
+      "action": "accept",
+      "src": ["user1@"],
+      "dst": ["*:*"]
+    },
+    {
+      "action": "accept",
+      "src":    ["tag:admin", "user1@"],
+      "dst":    ["0.0.0.0/0:*", "::/0:*", "192.168.1.0/24:*"]
+    }
+  ],
+  "ssh": [
+    {
+      "action": "check",
+      "check_period": "6h",
+      "src": ["tag:admin"],
+      "dst": ["tag:server"],
+      "users": ["autogroup:nonroot"]
+    },
+    {
+      "action": "check",
+      "check_period": "6h",
+      "src": ["tag:admin"],
+      "dst": ["tag:admin", "tag:exit-node"],
+      "users": ["autogroup:nonroot"]
+    }
+  ]
+}
+```
+
 ### Log Shipping — WireGuard wg0 (10.10.10.0/24)
 
-A dedicated WireGuard interface handles all log shipping traffic, deliberately separated from admin channels. All VMs and the laptop maintain encrypted tunnels to the VPS hub. The VPS forwards traffic between peers using the WireGuard routing table — no traffic is routable outside the `10.10.10.0/24` subnet.
+A dedicated WireGuard interface handles all log shipping traffic, deliberately separated from admin channels. All VMs, the laptop, and OPNsense maintain encrypted tunnels to the VPS hub. OPNsense logs and Wazuh agent data ship over this tunnel to the ELK and Wazuh VMs hosted on the Daily Driver. The VPS forwards traffic between peers using the WireGuard routing table — no traffic is routable outside the `10.10.10.0/24` subnet.
 
 ```
 Daily Driver  ─┐
+OPNsense      ─┤
 ELK VM        ─┤
 Wazuh VM      ─┼── VPS hub
 Vaultwarden   ─┤
@@ -79,7 +131,7 @@ Each service VM provisions its own wildcard TLS certificate via the NixOS `secur
 |---|---|---|
 | Network IPS | Suricata 7.0.3 | NFQUEUE active blocking on VPS public interface, et/open ruleset |
 | Host IPS | Suricata | NFQ mode on ELK, Wazuh, and Vaultwarden VMs — daily rule updates |
-| Host IDS | Wazuh 4.14.3 | Agents on all hosts, FIM, rootkit detection, SCA |
+| Host IDS | Wazuh 4.14.3 | Agents on all hosts including OPNsense, FIM, rootkit detection, SCA |
 | SIEM | Elasticsearch + Kibana 9.3.2 | Centralized log aggregation, KQL queries, custom dashboards |
 | **Edge Hardening** | **Nginx (VPS)** | **Global rate limiting, shared WebSocket upgrade maps, hidden file denial (`/\.`), and error code silencing (400/401/403/404/500 → 444)** |
 | **Anti-Recon** | **Nginx Blackhole** | **Default 443 server block using snakeoil certs returns 444 on all requests and all error codes — no SNI/domain leakage, no chatter on probes** |
@@ -87,7 +139,7 @@ Each service VM provisions its own wildcard TLS certificate via the NixOS `secur
 | **Firewall Hardening** | **iptables (VPS)** | **Explicit DROP rules for IKE/IPsec (UDP 500/4500), ICMP echo, and ICMP timestamp — silent drop before kernel generates ICMP unreachable responses** |
 | Log shipping | Fluent Bit | Structured shipping with custom Lua parsers, WireGuard transport |
 | Auth blocking | Fail2ban | VPS, ELK VM, Wazuh VM, and Vaultwarden VM — nftables backend, `blocktype=drop` (no REJECT chatter) |
-| Private mesh | Tailscale + Headscale | Zero trust, ACL-enforced, SSH via tailnet identity |
+| Private mesh | Tailscale + Headscale | Zero trust, ACL-enforced, SSH via tailnet identity; OPNsense as exit node |
 | Secrets management | sops-nix | Encrypted secrets in version-controlled NixOS config |
 | Reverse proxy | Nginx | Per-service TLS termination, public routing via VPS, exploit probe blocking |
 
@@ -100,7 +152,7 @@ A deliberate design decision to separate network traffic by function rather than
 | Channel | Transport | Traffic |
 |---|---|---|
 | Admin / SSH | Tailscale mesh | SSH, file transfers, service access |
-| Log shipping | WireGuard wg0 | Fluent Bit, Wazuh agent comms |
+| Log shipping | WireGuard wg0 | Fluent Bit, Wazuh agent comms, OPNsense logs |
 | Vaultwarden routing | WireGuard wg1 | Public → VPS (Hardened Proxy) → Vaultwarden VM |
 | VPS SSH | WireGuard wg2 | SSH access to VPS only |
 
@@ -181,6 +233,7 @@ Custom Lua parsers enrich log events beyond what standard parsers provide:
 - **Tailscale SSH parser** — extracts `tailscale_src_ip`, sets `tailscale_ssh: true` and `event_type: "tailscale_login"` from systemd journal entries on all NixOS hosts
 - **Fail2ban parser** — extracts `jail`, `action`, and `src_ip` from fail2ban log lines into queryable Kibana fields
 - **Suricata JSON parser** — full eve.json parsing including alert, flow, dns, http, tls, and stats event types
+- **OPNsense parser** — structured parsing of OPNsense firewall and system logs shipped over WireGuard
 
 Per-machine Elasticsearch users with scoped index permissions — each host ships logs under its own credentials, limiting blast radius in the event of credential compromise.
 
@@ -202,6 +255,7 @@ Custom dashboards built manually in Kibana against real production data:
 | Tailscale Activity | 📋 Planned |
 | Vaultwarden Access | ✅ Complete |
 | Sudo Activity | 🔄 In progress |
+| OPNsense Firewall | 📋 Planned |
 
 ---
 
@@ -220,7 +274,7 @@ The VPS runs Ubuntu and is a candidate for future NixOS + impermanence migration
 ## Tech Stack
 
 ### Core Infrastructure
-`NixOS` `Ubuntu` `KVM/QEMU` `WireGuard` `Tailscale` `Headscale` `Nginx` `Docker`
+`NixOS` `Ubuntu` `OPNsense` `KVM/QEMU` `WireGuard` `Tailscale` `Headscale` `Nginx` `Docker`
 
 ### Security & Monitoring
 `Elasticsearch` `Kibana` `Fluent Bit` `Wazuh` `Suricata IDS/IPS` `Fail2ban` `sops-nix`
@@ -252,12 +306,15 @@ All secrets (API keys, passwords, private keys, IP addresses) are managed via so
 | Fail2ban | ✅ Production — nftables backend, blocktype=drop |
 | WireGuard tunnels | ✅ Production |
 | Tailscale mesh | ✅ Production |
+| OPNsense Router | ✅ Production — Primary gateway, Headscale node, Tailscale exit node |
+| Headscale ACL Policy | ✅ Production — Tag-based, exit node routing, 6h SSH re-auth |
 | Vaultwarden | ✅ Production — daily use |
 | sops-nix | ✅ Production |
-| Fluent Bit parsers | ✅ Production — Tailscale SSH, fail2ban, Suricata |
+| Fluent Bit parsers | ✅ Production — Tailscale SSH, fail2ban, Suricata, OPNsense |
 | Access Logging Audit | ✅ Completed — Verified vhost log consistency |
+| OPNsense log shipping | ✅ Production — WireGuard transport to ELK |
 | Wazuh custom rules | 📋 Planned |
+| OPNsense Kibana Dashboard | 📋 Planned |
 | Zeek — Daily Driver | 📋 Planned |
-| OPNsense VM | 📋 Planned |
 | Attack simulation | 📋 Planned |
 | VPS NixOS migration | 📋 Planned |
