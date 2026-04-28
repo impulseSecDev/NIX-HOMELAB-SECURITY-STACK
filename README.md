@@ -17,7 +17,7 @@ Built for hands-on learning and portfolio demonstration across network security,
 | Host | OS | Role |
 |---|---|---|
 | [Daily Driver](https://github.com/impulseSecDev/dailyDriver) | NixOS | Primary workstation, KVM/QEMU VM host, OpenWebUI (local LLM) |
-| OPNsense Router | OPNsense | Primary gateway, Headscale node, Tailscale exit node |
+| OPNsense Router | OPNsense | Primary gateway, Tailscale exit node |
 | VPS | Ubuntu | Nginx (Hardened), Headscale, Suricata IPS, WireGuard hub, Fail2ban |
 | [ELK VM](https://github.com/impulseSecDev/ELK-NIXVM) | NixOS | Elasticsearch, Kibana, Fluent Bit — SIEM core |
 | [Wazuh VM](https://github.com/impulseSecDev/WAZUH-NIXVM) | NixOS | Wazuh Manager, Fluent Bit — HIDS core |
